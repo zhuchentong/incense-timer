@@ -20,7 +20,6 @@ typedef enum {
 
 static const char *TAG = "incense_audio";
 static QueueHandle_t s_queue;
-static volatile bool s_cancel;
 
 // 写一段指定频率的正弦音（frequency=0 为静音间隔）。尾部线性淡出避免爆音。
 static void write_tone(int frequency, int duration_ms) {
@@ -28,7 +27,7 @@ static void write_tone(int frequency, int duration_ms) {
     int total = TONE_SAMPLE_RATE * duration_ms / 1000;
     double step = frequency > 0 ? 2.0 * M_PI * frequency / TONE_SAMPLE_RATE : 0.0;
     int written = 0;
-    while (total > 0 && !s_cancel) {
+    while (total > 0) {
         int count = total < TONE_CHUNK ? total : TONE_CHUNK;
         for (int i = 0; i < count; i++) {
             int value = 0;
@@ -56,7 +55,7 @@ static void audio_task(void *arg) {
     while (true) {
         if (xQueueReceive(s_queue, &msg, portMAX_DELAY) != pdTRUE) continue;
         if (msg == AUDIO_MSG_COMPLETE) {
-            for (int note = 0; note < 3 && !s_cancel; note++) {
+            for (int note = 0; note < 3; note++) {
                 if (note > 0) write_tone(0, 100); // 100 ms 静音间隔
                 write_tone(880, 150);
             }
@@ -75,7 +74,6 @@ void incense_audio_prepare(bool audio_ok) {
 
 void incense_audio_play_complete(void) {
     if (!s_queue) return; // 软降级：音频不可用时静默忽略
-    s_cancel = false;
     uint8_t msg = AUDIO_MSG_COMPLETE;
     xQueueOverwrite(s_queue, &msg);
 }

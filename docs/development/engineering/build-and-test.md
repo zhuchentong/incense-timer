@@ -137,11 +137,11 @@ these debug bundles; runner-local archives disappear when the runner is removed.
 Any additional retention/upload policy needs an explicit content and access review.
 No build/archive command flashes a device.
 
-The static gate also compiles the actual BSP and demo implementations against
-small platform stubs. These fault-injection tests cover task handoff and stop
-retries, recording failures, Wi-Fi/BLE startup rollback, button allocation and
-ADC failures, LVGL initialization locking/retry, and codec open/sleep/wake
-recovery. They need only a host C compiler and Python, not ESP-IDF or downloaded
+The static gate also compiles BSP implementations and pure application logic
+against small platform stubs. These tests cover layout rounding, ES8311
+sleep/wake recovery, button and LVGL initialization fault injection, the
+incense-timer state machine, and UI-string font-coverage consistency. They
+need only a host C compiler and Python, not ESP-IDF or downloaded
 Managed Components. They do not establish real timing, electrical behavior or
 device compatibility; the firmware gate compiles against the pinned dependencies.
 
@@ -149,9 +149,9 @@ To run an individual pure-logic test:
 
 ```bash
 cc -std=c11 -Wall -Wextra -Werror -Imain \
-  tests/test_ui_pixel_math.c main/ui_pixel_math.c \
-  -o /tmp/test_ui_pixel_math
-/tmp/test_ui_pixel_math
+  tests/test_incense_model.c main/incense_model.c \
+  -o /tmp/test_incense_model
+/tmp/test_incense_model
 ```
 
 Use the unified validation entry point:

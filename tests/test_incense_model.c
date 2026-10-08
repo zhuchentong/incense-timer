@@ -287,6 +287,16 @@ static void test_restore_rebuilds_from_persisted_fields(void) {
                            .remaining_sec = 100 };
     incense_model_restore(&m);
     CHECK_EQ(m.selected_index, 0);
+
+    // remaining_sec 超过最大时长（CRC 碰撞等极端损坏）→ 默认。
+    m = (incense_model_t){ .version = INCENSE_MODEL_VERSION,
+                           .state = INCENSE_RUNNING,
+                           .selected_index = 1,
+                           .custom_min = 30,
+                           .remaining_sec = 4000000000U };
+    incense_model_restore(&m);
+    CHECK_EQ(m.state, INCENSE_IDLE);
+    CHECK_EQ(m.remaining_sec, 15U * 60U); // 默认档位 15 分
 }
 
 int main(void) {

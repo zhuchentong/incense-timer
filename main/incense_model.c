@@ -36,6 +36,7 @@ void incense_model_restore(incense_model_t *model) {
         model->custom_min < INCENSE_CUSTOM_MIN_MINUTES ||
         model->custom_min > INCENSE_CUSTOM_MAX_MINUTES ||
         (model->custom_min % INCENSE_CUSTOM_STEP_MINUTES) != 0 ||
+        model->remaining_sec > (uint32_t)INCENSE_CUSTOM_MAX_MINUTES * 60U ||
         model->state > INCENSE_DONE) {
         incense_model_defaults(model);
         return;

@@ -2,7 +2,6 @@
 
 #include <stdio.h>
 
-#include "bsp_audio.h"
 #include "bsp_battery.h"
 #include "esp_log.h"
 #include "esp_timer.h"
