@@ -27,6 +27,10 @@ LV_FONT_DECLARE(app_font_24);
 #define COLOR_EMBER_B 0xC24818
 #define COLOR_EMBER_DIM 0x5A3A20
 #define COLOR_SMOKE 0x6E6A66
+#define COLOR_BRONZE_BODY 0x6E4A22
+#define COLOR_BRONZE_LIGHT 0x9A6E33
+#define COLOR_BRONZE_RIM 0xC89B52
+#define COLOR_BRONZE_DARK 0x4A3016
 
 #define UI_TIMER_PERIOD_MS 250
 #define UI_ANIM_PERIOD_MS 100
@@ -112,7 +116,9 @@ static void draw_pixel_rect(lv_layer_t *layer, const lv_area_t *base,
 }
 
 // 香体燃烧动画：香体随剩余时间从上往下变短（燃点在顶端），
+// 香脚锚定在炉口内——烧到最后整支香没入青铜双耳炉。
 // RUNNING 时燃点红橙闪烁 + 青烟摆动上升；PAUSED 时整支冻结为暗红余烬。
+// 全部坐标为层内相对坐标（层 72x212，页面居中放置）。
 static void incense_draw_cb(lv_event_t *event) {
     if (!s_model || (s_model->state != INCENSE_RUNNING &&
                      s_model->state != INCENSE_PAUSED)) {
@@ -128,33 +134,46 @@ static void incense_draw_cb(lv_event_t *event) {
     if (total == 0) return;
     if (remaining > total) remaining = total;
 
-    const int STICK_X = 16, STICK_W = 8;
-    const int TOP = 28, H = 184; // 层内坐标
-    int tip_y = TOP + (int)(((uint64_t)(total - remaining)) * H / total);
+    const int STICK_X = 32, STICK_W = 8;
+    const int MOUTH_Y = 168; // 炉口内香脚终点（层内坐标）
+    int tip_y = (int)(((uint64_t)(total - remaining)) * MOUTH_Y / total);
     bool burning = s_model->state == INCENSE_RUNNING;
 
     // 香体 + 顶端炭化段。
-    draw_pixel_rect(layer, &base, STICK_X, tip_y, STICK_W, TOP + H - tip_y,
+    draw_pixel_rect(layer, &base, STICK_X, tip_y, STICK_W, MOUTH_Y - tip_y,
                     COLOR_WOOD);
-    if (TOP + H - tip_y > 6) {
-        draw_pixel_rect(layer, &base, STICK_X, tip_y, STICK_W, 6, COLOR_CHAR);
+    if (MOUTH_Y - tip_y > 9) {
+        draw_pixel_rect(layer, &base, STICK_X, tip_y + 3, STICK_W, 6,
+                        COLOR_CHAR);
     }
 
     // 燃点：燃烧中红橙交替闪烁，暂停时暗红余烬。
     uint32_t ember = burning ? (((s_anim_frame / 4) & 1) ? COLOR_EMBER_A
                                                          : COLOR_EMBER_B)
                              : COLOR_EMBER_DIM;
-    draw_pixel_rect(layer, &base, STICK_X, tip_y - 3, STICK_W, 3, ember);
+    draw_pixel_rect(layer, &base, STICK_X, tip_y >= 3 ? tip_y - 3 : 0, STICK_W,
+                    3, ember);
 
     // 青烟：仅燃烧中，三缕随帧摆动上升。
     if (burning) {
         for (int k = 0; k < 3; k++) {
             int y = tip_y - 9 - k * 10;
             if (y < 2) break;
-            int x = 20 + SMOKE_SWAY[(s_anim_frame / 3 + k * 2) & 7];
+            int x = 34 + SMOKE_SWAY[(s_anim_frame / 3 + k * 2) & 7];
             draw_pixel_rect(layer, &base, x, y, 2, 4, COLOR_SMOKE);
         }
     }
+
+    // 青铜双耳炉（静态，后绘以遮挡炉内香脚）：双耳 → 口沿 → 炉身 → 高光/暗部 → 圈足。
+    draw_pixel_rect(layer, &base, 6, 156, 6, 20, COLOR_BRONZE_LIGHT);
+    draw_pixel_rect(layer, &base, 60, 156, 6, 20, COLOR_BRONZE_LIGHT);
+    draw_pixel_rect(layer, &base, 6, 168, 60, 8, COLOR_BRONZE_RIM);
+    draw_pixel_rect(layer, &base, 10, 176, 52, 8, COLOR_BRONZE_BODY);
+    draw_pixel_rect(layer, &base, 13, 184, 46, 8, COLOR_BRONZE_BODY);
+    draw_pixel_rect(layer, &base, 16, 192, 40, 8, COLOR_BRONZE_BODY);
+    draw_pixel_rect(layer, &base, 14, 176, 3, 22, COLOR_BRONZE_LIGHT);
+    draw_pixel_rect(layer, &base, 53, 176, 3, 22, COLOR_BRONZE_DARK);
+    draw_pixel_rect(layer, &base, 24, 200, 24, 8, COLOR_BRONZE_DARK);
 }
 
 static void build_idle_page(void) {
@@ -184,16 +203,16 @@ static void build_idle_page(void) {
 static void build_run_page(void) {
     s_run_page = make_page();
 
-    // 香体动画层：覆盖香体 + 青烟摆动范围，只需重绘这一小块。
-    s_incense_layer = make_blank_obj(s_run_page, 100, 28, 40, 224);
+    // 香体+香炉动画层：覆盖香体、青烟摆动与炉体范围，只需重绘这一小块。
+    s_incense_layer = make_blank_obj(s_run_page, 84, 24, 72, 212);
     lv_obj_add_event_cb(s_incense_layer, incense_draw_cb, LV_EVENT_DRAW_MAIN,
                         NULL);
 
     s_time_label = make_label(s_run_page, &app_font_24, COLOR_TEXT);
-    lv_obj_set_pos(s_time_label, 0, 248);
+    lv_obj_set_pos(s_time_label, 0, 244);
 
     s_status_label = make_label(s_run_page, &app_font_24, COLOR_ACCENT);
-    lv_obj_set_pos(s_status_label, 0, 284);
+    lv_obj_set_pos(s_status_label, 0, 280);
 }
 
 static void build_confirm_page(void) {
