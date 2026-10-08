@@ -21,8 +21,15 @@ LV_FONT_DECLARE(app_font_24);
 #define COLOR_DIM 0x8A8177
 #define COLOR_ACCENT 0xF5A623
 #define COLOR_DANGER 0xD0453A
+#define COLOR_WOOD 0x8A5A2B
+#define COLOR_CHAR 0x3A3430
+#define COLOR_EMBER_A 0xFF7A1A
+#define COLOR_EMBER_B 0xC24818
+#define COLOR_EMBER_DIM 0x5A3A20
+#define COLOR_SMOKE 0x6E6A66
 
 #define UI_TIMER_PERIOD_MS 250
+#define UI_ANIM_PERIOD_MS 100
 #define UI_BATTERY_TICKS (30000 / UI_TIMER_PERIOD_MS) // 30 s
 
 static const char *TAG = "incense_ui";
@@ -34,12 +41,14 @@ static lv_obj_t *s_battery_label;
 static lv_obj_t *s_idle_page;
 static lv_obj_t *s_rows[INCENSE_OPTION_COUNT];
 static lv_obj_t *s_run_page;
+static lv_obj_t *s_incense_layer;
 static lv_obj_t *s_time_label;
 static lv_obj_t *s_status_label;
-static lv_obj_t *s_run_hint_label;
 static lv_obj_t *s_confirm_page;
 static lv_obj_t *s_done_page;
 static lv_timer_t *s_timer;
+static lv_timer_t *s_anim_timer;
+static uint16_t s_anim_frame;
 static incense_state_t s_page;
 static uint32_t s_last_sec = UINT32_MAX;
 static uint32_t s_save_bucket = UINT32_MAX;
@@ -66,15 +75,86 @@ static void set_page(incense_state_t state);
 // 页面构建
 // ---------------------------------------------------------------------------
 
+static lv_obj_t *make_blank_obj(lv_obj_t *parent, int x, int y, int w, int h) {
+    lv_obj_t *obj = lv_obj_create(parent);
+    lv_obj_set_pos(obj, x, y);
+    lv_obj_set_size(obj, w, h);
+    lv_obj_set_style_bg_opa(obj, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(obj, 0, 0);
+    lv_obj_set_style_pad_all(obj, 0, 0);
+    lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
+    return obj;
+}
+
 static lv_obj_t *make_page(void) {
-    lv_obj_t *page = lv_obj_create(s_scr);
-    lv_obj_set_pos(page, 0, 0);
-    lv_obj_set_size(page, 240, 320);
-    lv_obj_set_style_bg_opa(page, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(page, 0, 0);
-    lv_obj_set_style_pad_all(page, 0, 0);
-    lv_obj_clear_flag(page, LV_OBJ_FLAG_SCROLLABLE);
-    return page;
+    return make_blank_obj(s_scr, 0, 0, 240, 320);
+}
+
+static const int8_t SMOKE_SWAY[8] = { 0, 1, 2, 1, 0, -1, -2, -1 };
+
+static uint32_t displayed_seconds(void);
+
+static void draw_pixel_rect(lv_layer_t *layer, const lv_area_t *base,
+                            int x, int y, int w, int h, uint32_t color) {
+    lv_draw_rect_dsc_t dsc;
+    lv_draw_rect_dsc_init(&dsc);
+    dsc.base.layer = layer;
+    dsc.bg_color = lv_color_hex(color);
+    dsc.bg_opa = LV_OPA_COVER;
+    dsc.radius = 0;
+    lv_area_t area = {
+        .x1 = base->x1 + x,
+        .y1 = base->y1 + y,
+        .x2 = base->x1 + x + w - 1,
+        .y2 = base->y1 + y + h - 1,
+    };
+    lv_draw_rect(layer, &dsc, &area);
+}
+
+// 香体燃烧动画：香体随剩余时间从上往下变短（燃点在顶端），
+// RUNNING 时燃点红橙闪烁 + 青烟摆动上升；PAUSED 时整支冻结为暗红余烬。
+static void incense_draw_cb(lv_event_t *event) {
+    if (!s_model || (s_model->state != INCENSE_RUNNING &&
+                     s_model->state != INCENSE_PAUSED)) {
+        return;
+    }
+    lv_obj_t *obj = lv_event_get_current_target(event);
+    lv_layer_t *layer = lv_event_get_layer(event);
+    lv_area_t base;
+    lv_obj_get_coords(obj, &base);
+
+    uint32_t total = (uint32_t)incense_model_minutes(s_model) * 60U;
+    uint32_t remaining = displayed_seconds();
+    if (total == 0) return;
+    if (remaining > total) remaining = total;
+
+    const int STICK_X = 16, STICK_W = 8;
+    const int TOP = 28, H = 184; // 层内坐标
+    int tip_y = TOP + (int)(((uint64_t)(total - remaining)) * H / total);
+    bool burning = s_model->state == INCENSE_RUNNING;
+
+    // 香体 + 顶端炭化段。
+    draw_pixel_rect(layer, &base, STICK_X, tip_y, STICK_W, TOP + H - tip_y,
+                    COLOR_WOOD);
+    if (TOP + H - tip_y > 6) {
+        draw_pixel_rect(layer, &base, STICK_X, tip_y, STICK_W, 6, COLOR_CHAR);
+    }
+
+    // 燃点：燃烧中红橙交替闪烁，暂停时暗红余烬。
+    uint32_t ember = burning ? (((s_anim_frame / 4) & 1) ? COLOR_EMBER_A
+                                                         : COLOR_EMBER_B)
+                             : COLOR_EMBER_DIM;
+    draw_pixel_rect(layer, &base, STICK_X, tip_y - 3, STICK_W, 3, ember);
+
+    // 青烟：仅燃烧中，三缕随帧摆动上升。
+    if (burning) {
+        for (int k = 0; k < 3; k++) {
+            int y = tip_y - 9 - k * 10;
+            if (y < 2) break;
+            int x = 20 + SMOKE_SWAY[(s_anim_frame / 3 + k * 2) & 7];
+            draw_pixel_rect(layer, &base, x, y, 2, 4, COLOR_SMOKE);
+        }
+    }
 }
 
 static void build_idle_page(void) {
@@ -104,14 +184,16 @@ static void build_idle_page(void) {
 static void build_run_page(void) {
     s_run_page = make_page();
 
-    s_time_label = make_label(s_run_page, &app_font_48, COLOR_TEXT);
-    lv_obj_set_pos(s_time_label, 0, 116);
+    // 香体动画层：覆盖香体 + 青烟摆动范围，只需重绘这一小块。
+    s_incense_layer = make_blank_obj(s_run_page, 100, 28, 40, 224);
+    lv_obj_add_event_cb(s_incense_layer, incense_draw_cb, LV_EVENT_DRAW_MAIN,
+                        NULL);
+
+    s_time_label = make_label(s_run_page, &app_font_24, COLOR_TEXT);
+    lv_obj_set_pos(s_time_label, 0, 248);
 
     s_status_label = make_label(s_run_page, &app_font_24, COLOR_ACCENT);
-    lv_obj_set_pos(s_status_label, 0, 182);
-
-    s_run_hint_label = make_label(s_run_page, &app_font_24, COLOR_DIM);
-    lv_obj_set_pos(s_run_hint_label, 0, 224);
+    lv_obj_set_pos(s_status_label, 0, 284);
 }
 
 static void build_confirm_page(void) {
@@ -184,9 +266,9 @@ static void refresh_run_page(void) {
                           (unsigned long)(seconds % 60));
     bool paused = s_model->state == INCENSE_PAUSED;
     lv_label_set_text(s_status_label, INCENSE_TXT_PAUSED);
-    lv_label_set_text(s_run_hint_label, INCENSE_TXT_RESUME);
     set_hidden(s_status_label, !paused);
-    set_hidden(s_run_hint_label, !paused);
+    // 重绘香体（暂停冻结 / 恢复续燃的视觉切换）。
+    lv_obj_invalidate(s_incense_layer);
 }
 
 static void refresh_battery(void) {
@@ -280,6 +362,15 @@ void incense_ui_on_key(bsp_btn_t btn, bsp_btn_ev_t ev) {
     }
 }
 
+// 香体动画帧驱动：10 fps 推进闪烁/烟雾相位，只在 RUNNING 时重绘。
+static void anim_timer_cb(lv_timer_t *timer) {
+    (void)timer;
+    if (!s_model || !s_incense_layer) return;
+    if (s_model->state != INCENSE_RUNNING) return;
+    s_anim_frame++;
+    lv_obj_invalidate(s_incense_layer);
+}
+
 static void timer_cb(lv_timer_t *timer) {
     (void)timer;
     if (!s_model || !s_scr) return;
@@ -332,6 +423,7 @@ void incense_ui_init(incense_model_t *model, bool battery_ok) {
     s_save_bucket = UINT32_MAX;
     s_battery_ticks = 0;
     s_battery_soc = -1;
+    s_anim_frame = 0;
 
     s_scr = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(s_scr, lv_color_hex(COLOR_BG), 0);
@@ -356,6 +448,7 @@ void incense_ui_init(incense_model_t *model, bool battery_ok) {
 
     set_page(s_model->state); // 恢复启动时直接落在正确页
     s_timer = lv_timer_create(timer_cb, UI_TIMER_PERIOD_MS, NULL);
+    s_anim_timer = lv_timer_create(anim_timer_cb, UI_ANIM_PERIOD_MS, NULL);
     lv_screen_load(s_scr);
     ESP_LOGI(TAG, "incense UI ready (state=%d)", (int)s_model->state);
 }
