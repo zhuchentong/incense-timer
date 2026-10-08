@@ -42,6 +42,7 @@ static incense_model_t *s_model;
 static bool s_battery_ok;
 static lv_obj_t *s_scr;
 static lv_obj_t *s_battery_label;
+static lv_obj_t *s_title_label;
 static lv_obj_t *s_idle_page;
 static lv_obj_t *s_rows[INCENSE_OPTION_COUNT];
 static lv_obj_t *s_run_page;
@@ -135,11 +136,9 @@ static void incense_draw_cb(lv_event_t *event) {
     if (remaining > total) remaining = total;
 
     const int STICK_X = 32, STICK_W = 8;
-    const int STICK_TOP = 24; // 初始香顶（层内坐标），下移避开标题文字
-    const int MOUTH_Y = 168;  // 炉口内香脚终点（层内坐标）
-    int tip_y = STICK_TOP +
-                (int)(((uint64_t)(total - remaining)) * (MOUTH_Y - STICK_TOP) /
-                      total);
+    const int MOUTH_Y = 168; // 炉口内香脚终点（层内坐标）
+    // 焚香页标题已隐藏，香体可从层顶直达炉口，全长展示。
+    int tip_y = (int)(((uint64_t)(total - remaining)) * MOUTH_Y / total);
     bool burning = s_model->state == INCENSE_RUNNING;
 
     // 香体 + 顶端炭化段。
@@ -319,6 +318,9 @@ static void set_page(incense_state_t state) {
     set_hidden(s_idle_page, state != INCENSE_IDLE);
     set_hidden(s_run_page,
                state != INCENSE_RUNNING && state != INCENSE_PAUSED);
+    // 焚香页隐藏标题：香+炉即视觉主体，避免顶部拥挤（用户要求）。
+    set_hidden(s_title_label, state == INCENSE_RUNNING ||
+                                  state == INCENSE_PAUSED);
     set_hidden(s_confirm_page, state != INCENSE_ABANDON_CONFIRM);
     set_hidden(s_done_page, state != INCENSE_DONE);
     refresh_all();
@@ -452,9 +454,9 @@ void incense_ui_init(incense_model_t *model, bool battery_ok) {
     lv_obj_set_style_pad_all(s_scr, 0, 0);
     lv_obj_clear_flag(s_scr, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t *title = make_label(s_scr, &app_font_24, COLOR_TEXT);
-    lv_label_set_text(title, INCENSE_TXT_TITLE);
-    lv_obj_set_pos(title, 0, 12);
+    s_title_label = make_label(s_scr, &app_font_24, COLOR_TEXT);
+    lv_label_set_text(s_title_label, INCENSE_TXT_TITLE);
+    lv_obj_set_pos(s_title_label, 0, 12);
 
     s_battery_label = make_label(s_scr, &app_font_24, COLOR_DIM);
     lv_obj_set_width(s_battery_label, LV_SIZE_CONTENT);
