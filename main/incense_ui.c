@@ -291,10 +291,8 @@ static void refresh_all(void) {
 }
 
 static void set_page(incense_state_t state) {
-    if (s_page == state) {
-        refresh_all();
-        return;
-    }
+    // 无条件应用可见性：开机时 s_page 初值恰好等于恢复状态（如 IDLE），
+    // 若走"状态未变"快路径会跳过隐藏，四个页面全部叠印（设备实测缺陷）。
     s_page = state;
     set_hidden(s_idle_page, state != INCENSE_IDLE);
     set_hidden(s_run_page,
