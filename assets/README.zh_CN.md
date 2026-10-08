@@ -15,6 +15,13 @@
 - 添加字库前评估 Flash 与内部 RAM 影响；ESP32-C3 无 PSRAM。
 - 不提交许可不允许分发的字库。
 
+| 文件 | 来源与许可 | 用途 |
+| --- | --- | --- |
+| [`fonts/SourceHanSansSC-Regular.otf`](fonts/SourceHanSansSC-Regular.otf) | 思源黑体（Source Han Sans SC）Regular，2.004R 版，SIL Open Font License 1.1（[`fonts/LICENSE.txt`](fonts/LICENSE.txt)，[adobe-fonts/source-han-sans](https://github.com/adobe-fonts/source-han-sans/releases/tag/2.004R)） | 焚香计时器应用字库的源字体；OFL 允许再分发。 |
+| [`fonts/incense_chars.txt`](fonts/incense_chars.txt) | 仓库内清单 | 码点清单，必须覆盖 `main/incense_text.h` 的全部字符；由 `tests/test_incense_text.c` 强制校验。 |
+| [`fonts/generate_fonts.sh`](fonts/generate_fonts.sh) | 仓库内脚本 | 用固定版本 `lv_font_conv@1.5.3` 重新生成 LVGL 子集（需要 node/npx）：`./assets/fonts/generate_fonts.sh`。 |
+| [`fonts/app_font_48.c`](fonts/app_font_48.c)、[`fonts/app_font_24.c`](fonts/app_font_24.c) | 由上述脚本生成；请勿手改 | LVGL 48 px / 24 px、4 bpp、不压缩子集，覆盖 ASCII 0x20-0x7E 与上述清单；在 `main/CMakeLists.txt` 注册，由焚香计时器 UI 选用。粗略 Flash 开销：约 390 KB 与 120 KB 只读数据。 |
+
 ## 图片（images）
 
 可复用的源图与生成的显示资产放在 `images/`。

@@ -36,6 +36,9 @@ run_static_checks() {
         tests/test_incense_model.c main/incense_model.c \
         -o "${test_dir}/test_incense_model"
     "${test_dir}/test_incense_model"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+        tests/test_incense_text.c -o "${test_dir}/test_incense_text"
+    "${test_dir}/test_incense_text"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Icomponents/bsp/src \
         tests/test_bsp_display_rounding.c components/bsp/src/bsp_display_rounding.c \
         -o "${test_dir}/test_bsp_display_rounding"
