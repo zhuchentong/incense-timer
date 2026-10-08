@@ -135,8 +135,11 @@ static void incense_draw_cb(lv_event_t *event) {
     if (remaining > total) remaining = total;
 
     const int STICK_X = 32, STICK_W = 8;
-    const int MOUTH_Y = 168; // 炉口内香脚终点（层内坐标）
-    int tip_y = (int)(((uint64_t)(total - remaining)) * MOUTH_Y / total);
+    const int STICK_TOP = 24; // 初始香顶（层内坐标），下移避开标题文字
+    const int MOUTH_Y = 168;  // 炉口内香脚终点（层内坐标）
+    int tip_y = STICK_TOP +
+                (int)(((uint64_t)(total - remaining)) * (MOUTH_Y - STICK_TOP) /
+                      total);
     bool burning = s_model->state == INCENSE_RUNNING;
 
     // 香体 + 顶端炭化段。
