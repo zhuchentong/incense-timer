@@ -1,4 +1,6 @@
 build/
+/build-verified-*/
+/build-captures/
 sdkconfig
 sdkconfig.old
 managed_components/
